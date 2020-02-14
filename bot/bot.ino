@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <Servo.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 
@@ -16,7 +17,10 @@ int Bot_mtbs = 1000; //mean time between scan messages
 long Bot_lasttime;   //last time messages' scan has been done
 bool Start = false;
 
+Servo portServo;
 const int ledPin = 13;
+const int gatePin = 14;
+const int gateChannel = 0;
 int ledStatus = 0;
 
 void handleNewMessages(int numNewMessages) {
@@ -29,6 +33,15 @@ void handleNewMessages(int numNewMessages) {
 
     String from_name = bot.messages[i].from_name;
     if (from_name == "") from_name = "Guest";
+
+    if (text == "/open") {
+      openGate();
+      bot.sendMessage(chat_id, "Gate opened, you may pass", "");
+    }
+
+    if (text == "/close") {
+      closeGate();
+    }
 
     if (text == "/ledon") {
       digitalWrite(ledPin, HIGH);   // turn the LED on (HIGH is the voltage level)
@@ -61,8 +74,17 @@ void handleNewMessages(int numNewMessages) {
   }
 }
 
+void openGate() {
+  portServo.write(100);
+}
+
+void closeGate() {
+  portServo.write(10);
+}
 
 void setup() {
+  servo.attach(gatePin);
+  servo.write(0);
   Serial.begin(115200);
 
   // Attempt to connect to Wifi network:
