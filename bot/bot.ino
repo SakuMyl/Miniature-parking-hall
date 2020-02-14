@@ -22,7 +22,8 @@ const int gatePin = 14;
 
 int parkissa = 0;
 int paikkoja = 3;
-String autot[paikkoja];
+String autot[3];
+int asteet[3];
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -45,11 +46,12 @@ void handleNewMessages(int numNewMessages) {
       bot.sendMessage(chat_id, "Gate closed, YOU SHALL NOT PASS!", "");
     }
 
-    if (text.startsWith("/park") {
+    if (text.startsWith("/park")) {
       if (text.length() >= 10) {
-        String rekisteri = text[7]+text[8]+text[9];
+        char rekisteri = text.charAt(7)+text.charAt(8)+text.charAt(9);
         if (parkissa < paikkoja) {
-          
+          autot[parkissa-1] = rekisteri;
+          //rotate(asteet[parkissa-1]);
         }
       }
     }
