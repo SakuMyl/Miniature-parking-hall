@@ -20,43 +20,111 @@ bool Start = false;
 Servo gateServo;
 const int gatePin = 14;
 
-int parkissa = 0;
-int paikkoja = 3;
-String autot[3];
-int asteet[3];
+int parked = 0;
+const int spots = 3;
+String cars[spots];
+String chatIds[spots];
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
   Serial.println(String(numNewMessages));
 
   for (int i=0; i<numNewMessages; i++) {
-    String chat_id = String(bot.messages[i].chat_id);
+    String chatId = String(bot.messages[i].chat_id);
     String text = bot.messages[i].text;
 
-    String from_name = bot.messages[i].from_name;
-    if (from_name == "") from_name = "Guest";
+    String fromName = bot.messages[i].from_name;
+    if (fromName == "") fromName = "Guest";
 
     if (text == "/open") {
       openGate();
-      bot.sendMessage(chat_id, "Gate opened, you may pass", "");
+      bot.sendMessage(chatId, "Gate opened, you may pass", "");
     }
 
     if (text == "/close") {
       closeGate();
-      bot.sendMessage(chat_id, "Gate closed, YOU SHALL NOT PASS!", "");
+      bot.sendMessage(chatId, "Gate closed, YOU SHALL NOT PASS!", "");
     }
 
     if (text.startsWith("/park")) {
-      if (text.length() >= 10) {
-        char rekisteri = text.charAt(7)+text.charAt(8)+text.charAt(9);
-        if (parkissa < paikkoja) {
-          autot[parkissa-1] = rekisteri;
-          //rotate(asteet[parkissa-1]);
-        }
+      String plateNumber = text.substring(6);
+      if (validatePlateNumber(plateNumber, chatId)) {
+        park(plateNumber, chatId);
       }
     }
 
+    if (text.startsWith("/leave")) {
+      String plateNumber = text.substring(7);
+      if (validatePlateNumber(plateNumber, chatId)) {
+        leave(plateNumber, chatId);
+      }
+    }
+
+    if (text == "/start") {
+      start(chatId);
+    }
   }
+}
+
+bool validatePlateNumber(String plateNumber, String chatId) {
+  if (plateNumber.length() != 3) {
+    bot.sendMessage(chatId, "Please give a three character plate number after the command separated by a space.", "");
+    return false;
+  }
+  return true;
+}
+
+void leave(String plateNumber, String chatId) {
+  bool found = false;
+  int spot;
+  for (int i = 0; i < spots, !found; i++) {
+    if (cars[i] == plateNumber && chatIds[i] == chatId) {
+      found = true;
+      spot = i;
+    }
+  }
+  if (!found) {
+    bot.sendMessage(chatId, "Either car with plate number " + plateNumber + " is not parked or the car isn't yours.", "");
+  } else {
+    cars[spot] = "";
+    chatIds[spot] = "";
+    bot.sendMessage(chatId, "You may leave.", "");
+    parked--;
+  }
+}
+
+void start(String chatId) {
+  bot.sendMessage(chatId, "Commands:\n"
+                          "/start: display a list of commands\n"
+                          "/open: open the gate\n"
+                          "/close: close the gate\n"
+                          "/park ASD: park a car with plate number ASD (ASD can be replaced with any plate number)\n"
+                          "/leave ASD: get a car with plate number ASD out (similar to /park)\n"
+                          ,""
+                 );
+}
+
+void park(String plateNumber, String chatId) {
+  if (parked == spots) {
+    bot.sendMessage(chatId, "No spots left, sorry.", "");
+    return;
+  }
+  for (int i = 0; i < spots; i++) {
+    if (cars[i] == plateNumber) {
+      bot.sendMessage(chatId, plateNumber + " already inside.", "");
+      return;
+    }
+  }
+  bool spotFound = false;
+  for (int i = 0; i < spots, !spotFound; i++) {
+    if (cars[i] == "") {
+      cars[i] = plateNumber;
+      chatIds[i] = chatId;
+      spotFound = true;
+    }
+  }
+  parked++;
+  bot.sendMessage(chatId, plateNumber + ", you may go in.", "");
 }
 
 void openGate() {
@@ -71,10 +139,12 @@ void setup() {
   gateServo.attach(gatePin);
   closeGate();
   Serial.begin(115200);
+  
 
   // Attempt to connect to Wifi network:
   Serial.print("Connecting Wifi: ");
   Serial.println(ssid);
+  Serial.println("Toimi jo");
 
   // Set WiFi to station mode and disconnect from an AP if it was Previously
   // connected
