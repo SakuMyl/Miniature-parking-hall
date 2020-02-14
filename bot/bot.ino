@@ -1,5 +1,5 @@
 #include <WiFi.h>
-#include <Servo.h>
+#include <ESP32Servo.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 
@@ -17,11 +17,12 @@ int Bot_mtbs = 1000; //mean time between scan messages
 long Bot_lasttime;   //last time messages' scan has been done
 bool Start = false;
 
-Servo portServo;
-const int ledPin = 13;
+Servo gateServo;
 const int gatePin = 14;
-const int gateChannel = 0;
-int ledStatus = 0;
+
+int parkissa = 0;
+int paikkoja = 3;
+String autot[paikkoja];
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -41,50 +42,32 @@ void handleNewMessages(int numNewMessages) {
 
     if (text == "/close") {
       closeGate();
+      bot.sendMessage(chat_id, "Gate closed, YOU SHALL NOT PASS!", "");
     }
 
-    if (text == "/ledon") {
-      digitalWrite(ledPin, HIGH);   // turn the LED on (HIGH is the voltage level)
-      ledStatus = 1;
-      bot.sendMessage(chat_id, "Led is ON", "");
-    }
-
-    if (text == "/ledoff") {
-      ledStatus = 0;
-      digitalWrite(ledPin, LOW);    // turn the LED off (LOW is the voltage level)
-      bot.sendMessage(chat_id, "Led is OFF", "");
-    }
-
-    if (text == "/status") {
-      if(ledStatus){
-        bot.sendMessage(chat_id, "Led is ON", "");
-      } else {
-        bot.sendMessage(chat_id, "Led is OFF", "");
+    if (text.startsWith("/park") {
+      if (text.length() >= 10) {
+        String rekisteri = text[7]+text[8]+text[9];
+        if (parkissa < paikkoja) {
+          
+        }
       }
     }
 
-    if (text == "/start") {
-      String welcome = "Welcome to Universal Arduino Telegram Bot library, " + from_name + ".\n";
-      welcome += "This is Flash Led Bot example.\n\n";
-      welcome += "/ledon : to switch the Led ON\n";
-      welcome += "/ledoff : to switch the Led OFF\n";
-      welcome += "/status : Returns current status of LED\n";
-      bot.sendMessage(chat_id, welcome, "Markdown");
-    }
   }
 }
 
 void openGate() {
-  portServo.write(100);
+  gateServo.write(90);
 }
 
 void closeGate() {
-  portServo.write(10);
+  gateServo.write(4);
 }
 
 void setup() {
-  servo.attach(gatePin);
-  servo.write(0);
+  gateServo.attach(gatePin);
+  closeGate();
   Serial.begin(115200);
 
   // Attempt to connect to Wifi network:
@@ -106,9 +89,6 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  pinMode(ledPin, OUTPUT); // initialize digital ledPin as an output.
-  delay(10);
-  digitalWrite(ledPin, LOW); // initialize pin as off
 }
 
 void loop() {
