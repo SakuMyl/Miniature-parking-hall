@@ -16,6 +16,7 @@ UniversalTelegramBot bot(BOTtoken, client);
 int Bot_mtbs = 1000; //mean time between scan messages
 long Bot_lasttime;   //last time messages' scan has been done
 bool Start = false;
+bool parkOrLeaveInProcess = false;
 
 Servo gateServo;
 const int gatePin = 14;
@@ -29,8 +30,13 @@ void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
   Serial.println(String(numNewMessages));
 
+  
   for (int i=0; i<numNewMessages; i++) {
     String chatId = String(bot.messages[i].chat_id);
+    if (parkOrLeaveInProcess) {
+      bot.sendMessage("Someone is already entering or leaving the parking hall. Please wait.", "");
+      continue;
+    }
     String text = bot.messages[i].text;
 
     String fromName = bot.messages[i].from_name;
@@ -46,6 +52,10 @@ void handleNewMessages(int numNewMessages) {
       bot.sendMessage(chatId, "Gate closed, YOU SHALL NOT PASS!", "");
     }
 
+    if (text == "/spots") {
+      bot.sendMessage(chatId, String(spots - parked) + " spot(s) left.");
+    }
+    
     if (text.startsWith("/park")) {
       String plateNumber = text.substring(6);
       if (validatePlateNumber(plateNumber, chatId)) {
@@ -74,22 +84,28 @@ bool validatePlateNumber(String plateNumber, String chatId) {
   return true;
 }
 
-void leave(String plateNumber, String chatId) {
-  bool found = false;
-  int spot;
-  for (int i = 0; i < spots, !found; i++) {
-    if (cars[i] == plateNumber && chatIds[i] == chatId) {
-      found = true;
-      spot = i;
-    }
+int getSpotFor(String plateNumber, String chatId) {
+  for (int i = 0; i < spots; i++) {
+    if (cars[i] == plateNumber && chatIds[i]== chatId) return i;
   }
-  if (!found) {
+  return -1;
+}
+
+void leave(String plateNumber, String chatId) {
+  int spot = getSpotFor(plateNumber, chatId);
+  if (spot < 0) {
     bot.sendMessage(chatId, "Either car with plate number " + plateNumber + " is not parked or the car isn't yours.", "");
   } else {
+    parkOrLeaveInProcess = true;
+    openGate();
     cars[spot] = "";
     chatIds[spot] = "";
     bot.sendMessage(chatId, "You may leave.", "");
+    //Mock the delay of the user leaving
+    delay(2000);
     parked--;
+    closeGate();
+    parkOrLeaveInProcess = false;
   }
 }
 
@@ -100,6 +116,7 @@ void start(String chatId) {
                           "/close: close the gate\n"
                           "/park ASD: park a car with plate number ASD (ASD can be replaced with any plate number)\n"
                           "/leave ASD: get a car with plate number ASD out (similar to /park)\n"
+                          "/spots: get the number of spots left in the parking hall\n"
                           ,""
                  );
 }
@@ -115,16 +132,27 @@ void park(String plateNumber, String chatId) {
       return;
     }
   }
-  bool spotFound = false;
-  for (int i = 0; i < spots, !spotFound; i++) {
+  parkOrLeaveInProcess = true;
+  for (int i = 0; i < spots; i++) {
     if (cars[i] == "") {
       cars[i] = plateNumber;
       chatIds[i] = chatId;
-      spotFound = true;
+      break;
     }
   }
-  parked++;
+  //Temporary mock implementation
+  rotateDisk();
+  openGate();
   bot.sendMessage(chatId, plateNumber + ", you may go in.", "");
+  //Mock user going in
+  delay(2000);
+  closeGate();
+  parked++;
+  parkOrLeaveInProcess = false;
+}
+
+void rotateDisk() {
+  return;
 }
 
 void openGate() {
@@ -132,6 +160,7 @@ void openGate() {
 }
 
 void closeGate() {
+  //Anything below 4 have caused a servo to behave erroneously
   gateServo.write(4);
 }
 
@@ -144,7 +173,6 @@ void setup() {
   // Attempt to connect to Wifi network:
   Serial.print("Connecting Wifi: ");
   Serial.println(ssid);
-  Serial.println("Toimi jo");
 
   // Set WiFi to station mode and disconnect from an AP if it was Previously
   // connected
