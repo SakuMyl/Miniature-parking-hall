@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <ESP32Servo.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 
@@ -15,55 +16,159 @@ UniversalTelegramBot bot(BOTtoken, client);
 int Bot_mtbs = 1000; //mean time between scan messages
 long Bot_lasttime;   //last time messages' scan has been done
 bool Start = false;
+bool parkOrLeaveInProcess = false;
 
-const int ledPin = 13;
-int ledStatus = 0;
+Servo gateServo;
+const int gatePin = 14;
+
+int parked = 0;
+const int spots = 3;
+String cars[spots];
+String chatIds[spots];
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
   Serial.println(String(numNewMessages));
 
+  
   for (int i=0; i<numNewMessages; i++) {
-    String chat_id = String(bot.messages[i].chat_id);
+    String chatId = String(bot.messages[i].chat_id);
+    if (parkOrLeaveInProcess) {
+      bot.sendMessage("Someone is already entering or leaving the parking hall. Please wait.", "");
+      continue;
+    }
     String text = bot.messages[i].text;
 
-    String from_name = bot.messages[i].from_name;
-    if (from_name == "") from_name = "Guest";
+    String fromName = bot.messages[i].from_name;
+    if (fromName == "") fromName = "Guest";
 
-    if (text == "/ledon") {
-      digitalWrite(ledPin, HIGH);   // turn the LED on (HIGH is the voltage level)
-      ledStatus = 1;
-      bot.sendMessage(chat_id, "Led is ON", "");
+    if (text == "/open") {
+      openGate();
+      bot.sendMessage(chatId, "Gate opened, you may pass", "");
     }
 
-    if (text == "/ledoff") {
-      ledStatus = 0;
-      digitalWrite(ledPin, LOW);    // turn the LED off (LOW is the voltage level)
-      bot.sendMessage(chat_id, "Led is OFF", "");
+    if (text == "/close") {
+      closeGate();
+      bot.sendMessage(chatId, "Gate closed, YOU SHALL NOT PASS!", "");
     }
 
-    if (text == "/status") {
-      if(ledStatus){
-        bot.sendMessage(chat_id, "Led is ON", "");
-      } else {
-        bot.sendMessage(chat_id, "Led is OFF", "");
+    if (text == "/spots") {
+      bot.sendMessage(chatId, String(spots - parked) + " spot(s) left.");
+    }
+    
+    if (text.startsWith("/park")) {
+      String plateNumber = text.substring(6);
+      if (validatePlateNumber(plateNumber, chatId)) {
+        park(plateNumber, chatId);
+      }
+    }
+
+    if (text.startsWith("/leave")) {
+      String plateNumber = text.substring(7);
+      if (validatePlateNumber(plateNumber, chatId)) {
+        leave(plateNumber, chatId);
       }
     }
 
     if (text == "/start") {
-      String welcome = "Welcome to Universal Arduino Telegram Bot library, " + from_name + ".\n";
-      welcome += "This is Flash Led Bot example.\n\n";
-      welcome += "/ledon : to switch the Led ON\n";
-      welcome += "/ledoff : to switch the Led OFF\n";
-      welcome += "/status : Returns current status of LED\n";
-      bot.sendMessage(chat_id, welcome, "Markdown");
+      start(chatId);
     }
   }
 }
 
+bool validatePlateNumber(String plateNumber, String chatId) {
+  if (plateNumber.length() != 3) {
+    bot.sendMessage(chatId, "Please give a three character plate number after the command separated by a space.", "");
+    return false;
+  }
+  return true;
+}
+
+int getSpotFor(String plateNumber, String chatId) {
+  for (int i = 0; i < spots; i++) {
+    if (cars[i] == plateNumber && chatIds[i]== chatId) return i;
+  }
+  return -1;
+}
+
+void leave(String plateNumber, String chatId) {
+  int spot = getSpotFor(plateNumber, chatId);
+  if (spot < 0) {
+    bot.sendMessage(chatId, "Either car with plate number " + plateNumber + " is not parked or the car isn't yours.", "");
+  } else {
+    parkOrLeaveInProcess = true;
+    openGate();
+    cars[spot] = "";
+    chatIds[spot] = "";
+    bot.sendMessage(chatId, "You may leave.", "");
+    //Mock the delay of the user leaving
+    delay(2000);
+    parked--;
+    closeGate();
+    parkOrLeaveInProcess = false;
+  }
+}
+
+void start(String chatId) {
+  bot.sendMessage(chatId, "Commands:\n"
+                          "/start: display a list of commands\n"
+                          "/open: open the gate\n"
+                          "/close: close the gate\n"
+                          "/park ASD: park a car with plate number ASD (ASD can be replaced with any plate number)\n"
+                          "/leave ASD: get a car with plate number ASD out (similar to /park)\n"
+                          "/spots: get the number of spots left in the parking hall\n"
+                          ,""
+                 );
+}
+
+void park(String plateNumber, String chatId) {
+  if (parked == spots) {
+    bot.sendMessage(chatId, "No spots left, sorry.", "");
+    return;
+  }
+  for (int i = 0; i < spots; i++) {
+    if (cars[i] == plateNumber) {
+      bot.sendMessage(chatId, plateNumber + " already inside.", "");
+      return;
+    }
+  }
+  parkOrLeaveInProcess = true;
+  for (int i = 0; i < spots; i++) {
+    if (cars[i] == "") {
+      cars[i] = plateNumber;
+      chatIds[i] = chatId;
+      break;
+    }
+  }
+  //Temporary mock implementation
+  rotateDisk();
+  openGate();
+  bot.sendMessage(chatId, plateNumber + ", you may go in.", "");
+  //Mock user going in
+  delay(2000);
+  closeGate();
+  parked++;
+  parkOrLeaveInProcess = false;
+}
+
+void rotateDisk() {
+  return;
+}
+
+void openGate() {
+  gateServo.write(90);
+}
+
+void closeGate() {
+  //Anything below 4 have caused a servo to behave erroneously
+  gateServo.write(4);
+}
 
 void setup() {
+  gateServo.attach(gatePin);
+  closeGate();
   Serial.begin(115200);
+  
 
   // Attempt to connect to Wifi network:
   Serial.print("Connecting Wifi: ");
@@ -84,9 +189,6 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  pinMode(ledPin, OUTPUT); // initialize digital ledPin as an output.
-  delay(10);
-  digitalWrite(ledPin, LOW); // initialize pin as off
 }
 
 void loop() {
