@@ -30,6 +30,7 @@ bool parkOrLeaveInProcess = false;
 
 Servo gateServo;
 const int gatePin = 14;
+const int irPin = 16;
 
 int parked = 0;
 const int spots = 3;
@@ -88,6 +89,22 @@ void handleNewMessages(int numNewMessages) {
   }
 }
 
+bool checkPassage() {
+  int state = 0;
+  int start_time = millis();
+  int timeout = 20000;
+  while (state != 1) {
+    state = digitalRead(irPin);
+    delay(100);
+    if (millis() > start_time+timeout) return false;
+  }
+  while (state == 1) {
+    state = digitalRead(irPin);
+    delay(100);
+  }
+  return true;
+}
+
 bool validatePlateNumber(String plateNumber, String chatId) {
   if (plateNumber.length() != 3) {
     bot.sendMessage(chatId, "Please give a three character plate number after the command separated by a space.", "");
@@ -109,17 +126,19 @@ void leave(String plateNumber, String chatId) {
     bot.sendMessage(chatId, "Either car with plate number " + plateNumber + " is not parked or the car isn't yours.", "");
   } else {
     parkOrLeaveInProcess = true;
-    int steps = abs((current_position - i)*spot_angle);
+    int steps = abs((current_position - spot)*spot_angle);
     int direc = current_position-spot;
     rotateDisk(steps, direc);
     current_position = spot;
     openGate();
-    cars[spot] = "";
-    chatIds[spot] = "";
-    bot.sendMessage(chatId, "You may leave.", "");
-    //Mock the delay of the user leaving
-    delay(2000);
-    parked--;
+    if (checkPassage()) {
+      cars[spot] = "";
+      chatIds[spot] = "";
+      bot.sendMessage(chatId, "You may leave.", "");
+      parked--;
+    } else {
+      bot.sendMessage(chatId, "Are you having trouble with leaving?", "");
+    }
     closeGate();
     parkOrLeaveInProcess = false;
   }
@@ -161,12 +180,12 @@ void park(String plateNumber, String chatId) {
       break;
     }
   }
-  //Temporary mock implementation
   rotateDisk(steps, direc);
   openGate();
   bot.sendMessage(chatId, plateNumber + ", you may go in.", "");
-  //Mock user going in
-  delay(2000);
+  if (!(checkPassage())) {
+    bot.sendMessage(chatId, "The sensor didn't see you go in. Contact the infodesk.", "");
+  }
   closeGate();
   parked++;
   parkOrLeaveInProcess = false;
@@ -225,6 +244,8 @@ void setup() {
   pinMode(DIR,OUTPUT);
   digitalWrite(ENABLE,LOW);
   rotateDisk(FULLTURN, 0);
+
+  pinMode(irPin, INPUT);
 
 }
 
