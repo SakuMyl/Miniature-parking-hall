@@ -10,6 +10,16 @@ char password[] = ""; // your network key
 // Initialize Telegram BOT
 #define BOTtoken "991870882:AAHpEmLLp6IxCeFNGvLeExnWgh_dtDAnX8E"  // your Bot Token (Get from Botfather)
 
+// STEPPER pins
+#define STEP 0
+#define DIR 2
+#define ENABLE 4
+
+// STEPPER properties
+#define FULLTURN 400 // steps to make a full turn
+#define DELAY 10 // delay inbetween STEP-pulses in ms
+
+
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
 
@@ -25,6 +35,8 @@ int parked = 0;
 const int spots = 3;
 String cars[spots];
 String chatIds[spots];
+int current_position = 0;
+const int spot_angle = FULLTURN / spots;
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -97,6 +109,10 @@ void leave(String plateNumber, String chatId) {
     bot.sendMessage(chatId, "Either car with plate number " + plateNumber + " is not parked or the car isn't yours.", "");
   } else {
     parkOrLeaveInProcess = true;
+    int steps = abs((current_position - i)*spot_angle);
+    int direc = current_position-spot;
+    rotateDisk(steps, direc);
+    current_position = spot;
     openGate();
     cars[spot] = "";
     chatIds[spot] = "";
@@ -133,15 +149,20 @@ void park(String plateNumber, String chatId) {
     }
   }
   parkOrLeaveInProcess = true;
+  int steps = 0;
+  int direc = 0;
   for (int i = 0; i < spots; i++) {
     if (cars[i] == "") {
       cars[i] = plateNumber;
       chatIds[i] = chatId;
+      steps = abs((current_position - i)*spot_angle);
+      direc = current_position-i;
+      current_position = i;
       break;
     }
   }
   //Temporary mock implementation
-  rotateDisk();
+  rotateDisk(steps, direc);
   openGate();
   bot.sendMessage(chatId, plateNumber + ", you may go in.", "");
   //Mock user going in
@@ -151,8 +172,18 @@ void park(String plateNumber, String chatId) {
   parkOrLeaveInProcess = false;
 }
 
-void rotateDisk() {
-  return;
+void rotateDisk(int steps, int direc) {
+  if (direc >= 0) {
+    digitalWrite(DIR, HIGH);
+  } else {
+    digitalWrite(DIR, LOW);
+  }
+  for (int i = 0; i < steps; i++) {
+    digitalWrite(STEP, HIGH);
+    delay(DELAY);
+    digitalWrite(STEP, LOW);
+    delay(DELAY);
+  }
 }
 
 void openGate() {
@@ -188,6 +219,12 @@ void setup() {
   Serial.println("WiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+  pinMode(ENABLE,OUTPUT); 
+  pinMode(STEP,OUTPUT);
+  pinMode(DIR,OUTPUT);
+  digitalWrite(ENABLE,LOW);
+  rotateDisk(FULLTURN, 0);
 
 }
 
