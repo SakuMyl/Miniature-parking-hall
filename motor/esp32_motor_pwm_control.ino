@@ -2,7 +2,7 @@ int led_gpio = 4;
 int brightness = 0;
 int speed123 = 0;
 
-/*void setup() {
+void setup() {
   pinMode(2, OUTPUT);
   //pinMode(4, OUTPUT);
   //pinMode(0, OUTPUT);
@@ -10,7 +10,7 @@ int speed123 = 0;
   ledcAttachPin(led_gpio, 0);
   ledcSetup(0, 4000, 8);
   Serial.setTimeout(5000);
-}*/
+}
 
 void loop() {
   if (Serial.available()) {
@@ -41,5 +41,4 @@ void loop() {
         break;
     }
   }
-
 }
