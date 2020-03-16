@@ -43,7 +43,7 @@ void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
   Serial.println(String(numNewMessages));
 
-  
+
   for (int i=0; i<numNewMessages; i++) {
     String chatId = String(bot.messages[i].chat_id);
     if (parkOrLeaveInProcess) {
@@ -68,7 +68,7 @@ void handleNewMessages(int numNewMessages) {
     if (text == "/spots") {
       bot.sendMessage(chatId, String(spots - parked) + " spot(s) left.");
     }
-    
+
     if (text.startsWith("/park")) {
       String plateNumber = text.substring(6);
       if (validatePlateNumber(plateNumber, chatId)) {
@@ -205,6 +205,17 @@ void rotateDisk(int steps, int direc) {
   }
 }
 
+//Calibrate disk rotation
+void diskSetup() {
+  digitalWrite(DIR, LOW);
+  bool hasContact = true
+  while(!hasContact){ //hasContact needs to be replaced with contact sensors output
+    digitalWrite(STEP, HIGH)
+    delay(DELAY);
+  }
+  current_position = 0;
+}
+
 void openGate() {
   gateServo.write(90);
 }
@@ -218,7 +229,7 @@ void setup() {
   gateServo.attach(gatePin);
   closeGate();
   Serial.begin(115200);
-  
+
 
   // Attempt to connect to Wifi network:
   Serial.print("Connecting Wifi: ");
@@ -239,7 +250,7 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  pinMode(ENABLE,OUTPUT); 
+  pinMode(ENABLE,OUTPUT);
   pinMode(STEP,OUTPUT);
   pinMode(DIR,OUTPUT);
   digitalWrite(ENABLE,LOW);
