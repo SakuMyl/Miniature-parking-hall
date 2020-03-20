@@ -11,14 +11,13 @@ char password[] = ""; // your network key
 #define BOTtoken "991870882:AAHpEmLLp6IxCeFNGvLeExnWgh_dtDAnX8E"  // your Bot Token (Get from Botfather)
 
 // STEPPER pins
-#define STEP 0
-#define DIR 2
-#define ENABLE 4
+#define STEP 27
+#define DIR 14
+#define ENABLE 12
 
 // STEPPER properties
-#define FULLTURN 400 // steps to make a full turn
+#define FULLTURN 200 // steps to make a full turn
 #define DELAY 10 // delay inbetween STEP-pulses in ms
-
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
@@ -29,8 +28,10 @@ bool Start = false;
 bool parkOrLeaveInProcess = false;
 
 Servo gateServo;
-const int gatePin = 14;
-const int irPin = 16;
+const int gatePin = 25;
+const int irPin = 26;
+// Mocked for now
+const int switchPin = 0;
 
 int parked = 0;
 const int spots = 3;
@@ -42,7 +43,6 @@ const int spot_angle = FULLTURN / spots;
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
   Serial.println(String(numNewMessages));
-
 
   for (int i=0; i<numNewMessages; i++) {
     String chatId = String(bot.messages[i].chat_id);
@@ -90,15 +90,18 @@ void handleNewMessages(int numNewMessages) {
 }
 
 bool checkPassage() {
-  int state = 0;
+  int passing = 0;
   int start_time = millis();
   int timeout = 20000;
-  while (state != 1) {
-    state = digitalRead(irPin);
+  while (!passing) {
+    // Check the state twice to account for random incorrect bits
+    int state = digitalRead(irPin);
+    delay(10);
+    passing = state ? digitalRead(irPin) : 0;
     delay(100);
     if (millis() > start_time+timeout) return false;
   }
-  while (state == 1) {
+  while (passing) {
     state = digitalRead(irPin);
     delay(100);
   }
@@ -116,6 +119,17 @@ bool validatePlateNumber(String plateNumber, String chatId) {
 int getSpotFor(String plateNumber, String chatId) {
   for (int i = 0; i < spots; i++) {
     if (cars[i] == plateNumber && chatIds[i]== chatId) return i;
+  }
+  return -1;
+}
+
+int findNewSpotFor(String plateNumber, String chatId) {
+  for (int i = 0; i < spots; i++) {
+    if (cars[i] == "") {
+      cars[i] = plateNumber;
+      chatIds[i] = chatId;
+      return i;
+    }
   }
   return -1;
 }
@@ -168,18 +182,11 @@ void park(String plateNumber, String chatId) {
     }
   }
   parkOrLeaveInProcess = true;
-  int steps = 0;
-  int direc = 0;
-  for (int i = 0; i < spots; i++) {
-    if (cars[i] == "") {
-      cars[i] = plateNumber;
-      chatIds[i] = chatId;
-      steps = abs((current_position - i)*spot_angle);
-      direc = current_position-i;
-      current_position = i;
-      break;
-    }
-  }
+  // Should never return zero at this point
+  int i;
+  if ((i = findNewSpotFor(plateNumber, chatId)) < 0) return;
+  int steps = abs((current_position - i)*spot_angle);
+  int direc = current_position-i;
   rotateDisk(steps, direc);
   openGate();
   bot.sendMessage(chatId, plateNumber + ", you may go in.", "");
@@ -205,11 +212,10 @@ void rotateDisk(int steps, int direc) {
   }
 }
 
-//Calibrate disk rotation
+// Calibrate disk rotation
 void diskSetup() {
   digitalWrite(DIR, LOW);
-  bool hasContact = true
-  while(!hasContact){ //hasContact needs to be replaced with contact sensors output
+  while (!digitalRead(switchPin)) {
     digitalWrite(STEP, HIGH)
     delay(DELAY);
   }
@@ -230,7 +236,6 @@ void setup() {
   closeGate();
   Serial.begin(115200);
 
-
   // Attempt to connect to Wifi network:
   Serial.print("Connecting Wifi: ");
   Serial.println(ssid);
@@ -249,15 +254,12 @@ void setup() {
   Serial.println("WiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
   pinMode(ENABLE,OUTPUT);
   pinMode(STEP,OUTPUT);
   pinMode(DIR,OUTPUT);
   digitalWrite(ENABLE,LOW);
   rotateDisk(FULLTURN, 0);
-
   pinMode(irPin, INPUT);
-
 }
 
 void loop() {
