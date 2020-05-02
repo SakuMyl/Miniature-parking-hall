@@ -17,13 +17,13 @@ char password[] = ""; // your network key
 
 // STEPPER properties
 #define FULLTURN 200 // steps to make a full turn
-#define DELAY 10 // delay inbetween STEP-pulses in ms
+#define DELAY 25 // delay inbetween STEP-pulses in ms
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
 
 int Bot_mtbs = 1000; //mean time between scan messages
-long Bot_lasttime;   //last time messages' scan has been done
+long Bot_lasttime = 0;   //last time messages' scan has been done
 bool Start = false;
 bool parkOrLeaveInProcess = false;
 
@@ -31,14 +31,14 @@ Servo gateServo;
 const int gatePin = 25;
 const int irPin = 26;
 // Mocked for now
-const int switchPin = 0;
+const int switchPin = 13;
 
 int parked = 0;
 const int spots = 3;
 String cars[spots];
 String chatIds[spots];
 int current_position = 0;
-const int spot_angle = FULLTURN / spots;
+const int spot_angle = FULLTURN / spots - 1; // for zeroing-switch
 
 void handleNewMessages(int numNewMessages) {
   Serial.println("handleNewMessages");
@@ -90,6 +90,7 @@ void handleNewMessages(int numNewMessages) {
 }
 
 bool checkPassage() {
+  Serial.println("check passage");
   int passing = 0;
   int start_time = millis();
   int timeout = 20000;
@@ -102,9 +103,10 @@ bool checkPassage() {
     if (millis() > start_time+timeout) return false;
   }
   while (passing) {
-    state = digitalRead(irPin);
+    passing = digitalRead(irPin);
     delay(100);
   }
+  delay(2000);
   return true;
 }
 
@@ -135,6 +137,7 @@ int findNewSpotFor(String plateNumber, String chatId) {
 }
 
 void leave(String plateNumber, String chatId) {
+  Serial.println("leave");
   int spot = getSpotFor(plateNumber, chatId);
   if (spot < 0) {
     bot.sendMessage(chatId, "Either car with plate number " + plateNumber + " is not parked or the car isn't yours.", "");
@@ -145,10 +148,10 @@ void leave(String plateNumber, String chatId) {
     rotateDisk(steps, direc);
     current_position = spot;
     openGate();
+    bot.sendMessage(chatId, "You may leave.", "");
     if (checkPassage()) {
       cars[spot] = "";
       chatIds[spot] = "";
-      bot.sendMessage(chatId, "You may leave.", "");
       parked--;
     } else {
       bot.sendMessage(chatId, "Are you having trouble with leaving?", "");
@@ -171,6 +174,7 @@ void start(String chatId) {
 }
 
 void park(String plateNumber, String chatId) {
+  Serial.println("park");
   if (parked == spots) {
     bot.sendMessage(chatId, "No spots left, sorry.", "");
     return;
@@ -188,6 +192,7 @@ void park(String plateNumber, String chatId) {
   int steps = abs((current_position - i)*spot_angle);
   int direc = current_position-i;
   rotateDisk(steps, direc);
+  current_position = i;
   openGate();
   bot.sendMessage(chatId, plateNumber + ", you may go in.", "");
   if (!(checkPassage())) {
@@ -199,10 +204,11 @@ void park(String plateNumber, String chatId) {
 }
 
 void rotateDisk(int steps, int direc) {
+  Serial.println("rotate disk");
   if (direc >= 0) {
-    digitalWrite(DIR, HIGH);
-  } else {
     digitalWrite(DIR, LOW);
+  } else {
+    digitalWrite(DIR, HIGH);
   }
   for (int i = 0; i < steps; i++) {
     digitalWrite(STEP, HIGH);
@@ -215,27 +221,35 @@ void rotateDisk(int steps, int direc) {
 // Calibrate disk rotation
 void diskSetup() {
   digitalWrite(DIR, LOW);
+  Serial.println("Start diskSetup");
+  int value = 0;
+  
   while (!digitalRead(switchPin)) {
-    digitalWrite(STEP, HIGH)
-    delay(DELAY);
+    Serial.println(value); // DEBUG
+    digitalWrite(STEP, HIGH);
+    delay(40);
+    digitalWrite(STEP, LOW);
+    delay(40);
+    int value = digitalRead(switchPin);
   }
-  current_position = 0;
+  Serial.println("123");
 }
 
 void openGate() {
-  gateServo.write(90);
+  Serial.println("Gate open");
+  gateServo.write(85);
 }
 
 void closeGate() {
+  Serial.println("Gate closed");
   //Anything below 4 have caused a servo to behave erroneously
-  gateServo.write(4);
+  gateServo.write(175);
 }
 
 void setup() {
   gateServo.attach(gatePin);
   closeGate();
   Serial.begin(115200);
-
   // Attempt to connect to Wifi network:
   Serial.print("Connecting Wifi: ");
   Serial.println(ssid);
@@ -254,12 +268,15 @@ void setup() {
   Serial.println("WiFi connected");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
   pinMode(ENABLE,OUTPUT);
   pinMode(STEP,OUTPUT);
   pinMode(DIR,OUTPUT);
   digitalWrite(ENABLE,LOW);
-  rotateDisk(FULLTURN, 0);
   pinMode(irPin, INPUT);
+  pinMode(switchPin, INPUT);
+  diskSetup();  
+  
 }
 
 void loop() {
